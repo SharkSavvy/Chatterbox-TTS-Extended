@@ -9,8 +9,8 @@ import json
 
 # Import your Chatterbox TTS
 import sys
-sys.path.append('/workspace/chatterbox/src')
-from chatterbox.tts import ChatterboxTTS
+sys.path.append('/workspace/chatterbox')
+from chatterbox.src.chatterbox.tts import ChatterboxTTS
 
 # Global model instance
 MODEL = None

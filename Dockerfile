@@ -28,16 +28,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install RunPod
 RUN pip install runpod
 
-# Install additional dependencies for Chatterbox
+# Set up the Chatterbox environment
 WORKDIR /workspace/chatterbox
-RUN pip install -e .
+RUN pip install -r requirements.txt
 
-# Copy the handler
+# Add Chatterbox to Python path
+ENV PYTHONPATH="/workspace/chatterbox:${PYTHONPATH}"
+
+# Copy the handler to the working directory
 WORKDIR /workspace
 COPY runpod_chatterbox_handler.py .
 
-# Pre-download models to speed up first run
-RUN python3 -c "from chatterbox.src.chatterbox.tts import ChatterboxTTS; ChatterboxTTS.from_pretrained('cpu')" || echo "Model download failed, will download on first run"
+# Pre-download models to speed up first run (optional, may take time)
+# RUN python3 -c "from chatterbox.src.chatterbox.tts import ChatterboxTTS; ChatterboxTTS.from_pretrained('cpu')" || echo "Model download failed, will download on first run"
 
 # Set the entry point
 CMD ["python3", "runpod_chatterbox_handler.py"]
