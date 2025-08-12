@@ -23,6 +23,29 @@
             text-align: center;
             margin-bottom: 30px;
         }
+        .config-section {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .config-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .security-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
         .form-group {
             margin-bottom: 20px;
         }
@@ -31,6 +54,14 @@
             margin-bottom: 5px;
             font-weight: bold;
             color: #555;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-family: monospace;
         }
         textarea {
             width: 100%;
@@ -97,14 +128,18 @@
             text-align: right;
             margin-top: 5px;
         }
-        .api-info {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 20px;
-            font-size: 12px;
-            color: #856404;
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-ready {
+            background-color: #28a745;
+        }
+        .status-not-configured {
+            background-color: #dc3545;
         }
     </style>
 </head>
@@ -113,12 +148,29 @@
         <h1>🎵 Myers Audiobook Creator</h1>
         <p style="text-align: center; color: #666;">Custom Voice Cloning with Chatterbox TTS</p>
         
-        <div class="api-info">
-            <strong>⚠️ Deploy Instructions:</strong><br>
-            1. Upload your Chatterbox TTS to RunPod using the provided Dockerfile<br>
-            2. Update the API_ENDPOINT below with your new RunPod endpoint<br>
-            3. Update the API_KEY with your RunPod API key<br>
-            <strong>Current Status:</strong> <span id="apiStatus">Ready for your deployment</span>
+        <div class="security-warning">
+            <strong>🔒 SECURITY NOTICE:</strong> This page runs locally and keeps your API credentials secure. 
+            Never commit files with real API keys to GitHub or share them publicly!
+        </div>
+
+        <div class="config-section">
+            <div class="config-title">
+                🔧 RunPod Configuration
+                <span id="configStatus" class="status-indicator status-not-configured" title="Configuration needed"></span>
+            </div>
+            
+            <div class="form-group">
+                <label for="apiEndpoint">RunPod Endpoint URL:</label>
+                <input type="text" id="apiEndpoint" placeholder="https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/run">
+            </div>
+            
+            <div class="form-group">
+                <label for="apiKey">RunPod API Key:</label>
+                <input type="password" id="apiKey" placeholder="Your RunPod API key">
+                <small style="color: #666;">Your API key is masked for security</small>
+            </div>
+            
+            <button type="button" onclick="testConnection()" id="testBtn">🔌 Test Connection</button>
         </div>
         
         <div class="form-group">
@@ -142,9 +194,10 @@
     </div>
 
     <script>
-        // UPDATE THESE WITH YOUR RUNPOD DEPLOYMENT
-        const API_ENDPOINT = 'https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/run';
-        const API_KEY = 'YOUR_RUNPOD_API_KEY';
+        // DO NOT PUT REAL CREDENTIALS HERE!
+        // This will be populated by user input for security
+        let API_ENDPOINT = '';
+        let API_KEY = '';
 
         const textInput = document.getElementById('textInput');
         const voiceFile = document.getElementById('voiceFile');
@@ -154,7 +207,92 @@
         const resultMessage = document.getElementById('resultMessage');
         const audioPlayer = document.getElementById('audioPlayer');
         const generateBtn = document.getElementById('generateBtn');
-        const apiStatus = document.getElementById('apiStatus');
+        const configStatus = document.getElementById('configStatus');
+        const apiEndpoint = document.getElementById('apiEndpoint');
+        const apiKey = document.getElementById('apiKey');
+
+        // Load saved config from localStorage (stays local to your browser)
+        function loadConfig() {
+            const savedEndpoint = localStorage.getItem('runpod_endpoint');
+            const savedKey = localStorage.getItem('runpod_key');
+            
+            if (savedEndpoint) {
+                apiEndpoint.value = savedEndpoint;
+                API_ENDPOINT = savedEndpoint;
+            }
+            if (savedKey) {
+                apiKey.value = savedKey;
+                API_KEY = savedKey;
+            }
+            
+            updateConfigStatus();
+        }
+
+        // Save config to localStorage (browser only)
+        function saveConfig() {
+            API_ENDPOINT = apiEndpoint.value.trim();
+            API_KEY = apiKey.value.trim();
+            
+            if (API_ENDPOINT) localStorage.setItem('runpod_endpoint', API_ENDPOINT);
+            if (API_KEY) localStorage.setItem('runpod_key', API_KEY);
+            
+            updateConfigStatus();
+        }
+
+        // Update configuration status indicator
+        function updateConfigStatus() {
+            const isConfigured = API_ENDPOINT && API_KEY;
+            configStatus.className = `status-indicator ${isConfigured ? 'status-ready' : 'status-not-configured'}`;
+            configStatus.title = isConfigured ? 'Configuration ready' : 'Configuration needed';
+        }
+
+        // Test API connection
+        async function testConnection() {
+            saveConfig();
+            
+            if (!API_ENDPOINT || !API_KEY) {
+                showResult('error', 'Please enter both endpoint URL and API key.');
+                return;
+            }
+
+            const testBtn = document.getElementById('testBtn');
+            testBtn.disabled = true;
+            testBtn.textContent = 'Testing...';
+
+            try {
+                // Simple test payload
+                const payload = {
+                    input: {
+                        text: "Test connection",
+                        audio_prompt: "", // Empty for test
+                        exaggeration: 0.5
+                    }
+                };
+
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    showResult('success', '✅ Connection successful! Your API credentials are working.');
+                    updateConfigStatus();
+                } else {
+                    const errorText = await response.text();
+                    showResult('error', `❌ Connection failed: ${response.status} - ${errorText}`);
+                }
+
+            } catch (error) {
+                showResult('error', `❌ Connection error: ${error.message}`);
+            } finally {
+                testBtn.disabled = false;
+                testBtn.textContent = '🔌 Test Connection';
+            }
+        }
 
         // Update character count
         function updateCharCount() {
@@ -163,6 +301,10 @@
         
         textInput.addEventListener('input', updateCharCount);
         updateCharCount();
+
+        // Auto-save config on input
+        apiEndpoint.addEventListener('input', saveConfig);
+        apiKey.addEventListener('input', saveConfig);
 
         // Handle voice file selection
         voiceFile.addEventListener('change', function() {
@@ -196,6 +338,14 @@
         }
 
         async function generateAudio() {
+            // Make sure config is current
+            saveConfig();
+            
+            if (!API_ENDPOINT || !API_KEY) {
+                showResult('error', 'Please configure your RunPod endpoint and API key first.');
+                return;
+            }
+
             const text = textInput.value.trim();
             
             if (!text) {
@@ -228,7 +378,7 @@
                     }
                 };
 
-                console.log('Sending payload to Chatterbox TTS:', JSON.stringify(payload, null, 2));
+                console.log('Sending payload to Chatterbox TTS (credentials hidden)');
 
                 const response = await fetch(API_ENDPOINT, {
                     method: 'POST',
@@ -248,7 +398,7 @@
                 }
 
                 const data = await response.json();
-                console.log('Success response:', data);
+                console.log('Success response received');
 
                 // Handle async job - need to poll for results
                 if (data.id && data.status === 'IN_QUEUE') {
@@ -274,6 +424,14 @@
             const maxAttempts = 30; // 30 attempts = 5 minutes max
             let attempts = 0;
 
+            // Extract endpoint ID from the full endpoint URL
+            const endpointMatch = API_ENDPOINT.match(/\/v2\/([^\/]+)\/run/);
+            if (!endpointMatch) {
+                showResult('error', 'Invalid endpoint URL format');
+                return;
+            }
+            const endpointId = endpointMatch[1];
+
             while (attempts < maxAttempts) {
                 try {
                     await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
@@ -281,7 +439,7 @@
 
                     showResult('loading', `Checking job status... (attempt ${attempts}/${maxAttempts})`);
 
-                    const statusResponse = await fetch(`https://api.runpod.ai/v2/${API_ENDPOINT.split('/')[5]}/status/${jobId}`, {
+                    const statusResponse = await fetch(`https://api.runpod.ai/v2/${endpointId}/status/${jobId}`, {
                         method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${API_KEY}`
@@ -293,7 +451,7 @@
                     }
 
                     const statusData = await statusResponse.json();
-                    console.log('Status check response:', statusData);
+                    console.log('Status check response received');
 
                     if (statusData.status === 'COMPLETED') {
                         if (statusData.output) {
@@ -326,7 +484,7 @@
         }
 
         function handleAudioResult(data, textLength) {
-            console.log('Handling audio result:', data);
+            console.log('Handling audio result');
             
             if (!data.output) {
                 showResult('error', 'Response completed but no output field found. Check console for details.');
@@ -386,6 +544,12 @@
                 showResult('error', 'Audio generated but no recognized audio format in response. Check console for details.');
             }
         }
+
+        // Initialize the page
+        window.addEventListener('load', function() {
+            loadConfig();
+            updateCharCount();
+        });
     </script>
 </body>
 </html>
