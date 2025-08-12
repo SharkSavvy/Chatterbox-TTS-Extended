@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Myers Audiobook Creator - Chatterbox TTS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007cba;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #005a87;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        audio {
+            width: 100%;
+            margin-top: 15px;
+        }
+        .char-count {
+            font-size: 12px;
+            color: #666;
+            text-align: right;
+            margin-top: 5px;
+        }
+        .api-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Myers Audiobook Creator</h1>
+        <p style="text-align: center; color: #666;">Custom Voice Cloning with Chatterbox TTS</p>
+        
+        <div class="api-info">
+            <strong>⚠️ Deploy Instructions:</strong><br>
+            1. Upload your Chatterbox TTS to RunPod using the provided Dockerfile<br>
+            2. Update the API_ENDPOINT below with your new RunPod endpoint<br>
+            3. Update the API_KEY with your RunPod API key<br>
+            <strong>Current Status:</strong> <span id="apiStatus">Ready for your deployment</span>
+        </div>
+        
+        <div class="form-group">
+            <label for="voiceFile">🎤 Your Voice Sample (REQUIRED for voice cloning):</label>
+            <input type="file" id="voiceFile" accept="audio/*">
+            <div id="voiceStatus" style="margin-top: 5px; font-style: italic; color: #666;">No voice sample selected</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="textInput">📝 Text to Convert:</label>
+            <textarea id="textInput" placeholder="Enter your text here...">Hello! This is a test of my custom voice cloning system. I should sound exactly like the voice sample I uploaded.</textarea>
+            <div class="char-count">Characters: <span id="charCount">0</span></div>
+        </div>
+        
+        <button id="generateBtn" onclick="generateAudio()">🚀 Generate Audio with My Voice</button>
+        
+        <div id="result" class="result">
+            <div id="resultMessage"></div>
+            <audio id="audioPlayer" controls style="display: none;"></audio>
+        </div>
+    </div>
+
+    <script>
+        // UPDATE THESE WITH YOUR RUNPOD DEPLOYMENT
+        const API_ENDPOINT = 'https://api.runpod.ai/v2/YOUR_ENDPOINT_ID/run';
+        const API_KEY = 'YOUR_RUNPOD_API_KEY';
+
+        const textInput = document.getElementById('textInput');
+        const voiceFile = document.getElementById('voiceFile');
+        const voiceStatus = document.getElementById('voiceStatus');
+        const charCount = document.getElementById('charCount');
+        const result = document.getElementById('result');
+        const resultMessage = document.getElementById('resultMessage');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const generateBtn = document.getElementById('generateBtn');
+        const apiStatus = document.getElementById('apiStatus');
+
+        // Update character count
+        function updateCharCount() {
+            charCount.textContent = textInput.value.length;
+        }
+        
+        textInput.addEventListener('input', updateCharCount);
+        updateCharCount();
+
+        // Handle voice file selection
+        voiceFile.addEventListener('change', function() {
+            if (this.files[0]) {
+                const file = this.files[0];
+                voiceStatus.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                voiceStatus.style.color = '#155724';
+            } else {
+                voiceStatus.textContent = 'No voice sample selected';
+                voiceStatus.style.color = '#666';
+            }
+        });
+
+        function showResult(type, message) {
+            result.className = `result ${type}`;
+            result.style.display = 'block';
+            resultMessage.textContent = message;
+            
+            if (type !== 'success') {
+                audioPlayer.style.display = 'none';
+            }
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        async function generateAudio() {
+            const text = textInput.value.trim();
+            
+            if (!text) {
+                showResult('error', 'Please enter some text to convert.');
+                return;
+            }
+
+            if (!voiceFile.files[0]) {
+                showResult('error', 'Please upload a voice sample for cloning.');
+                return;
+            }
+
+            // Show loading
+            showResult('loading', 'Processing voice sample and generating audio...');
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+
+            try {
+                // Convert voice file to base64
+                const voiceBase64 = await fileToBase64(voiceFile.files[0]);
+                
+                // Prepare the request payload for Chatterbox TTS
+                const payload = {
+                    input: {
+                        text: text,
+                        audio_prompt: voiceBase64,
+                        exaggeration: 0.5,
+                        temperature: 0.8,
+                        cfg_weight: 1.0
+                    }
+                };
+
+                console.log('Sending payload to Chatterbox TTS:', JSON.stringify(payload, null, 2));
+
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.log('Error response:', errorText);
+                    throw new Error(`API Error ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                console.log('Success response:', data);
+
+                // Handle async job - need to poll for results
+                if (data.id && data.status === 'IN_QUEUE') {
+                    showResult('loading', `Job queued (ID: ${data.id}). Polling for results...`);
+                    await pollForResult(data.id, text.length);
+                } else if (data.output) {
+                    // Direct result (sync mode)
+                    handleAudioResult(data, text.length);
+                } else {
+                    showResult('error', 'Unexpected response format. Check console for details.');
+                }
+
+            } catch (error) {
+                console.error('Generation error:', error);
+                showResult('error', `❌ Error: ${error.message}`);
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🚀 Generate Audio with My Voice';
+            }
+        }
+
+        async function pollForResult(jobId, textLength) {
+            const maxAttempts = 30; // 30 attempts = 5 minutes max
+            let attempts = 0;
+
+            while (attempts < maxAttempts) {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+                    attempts++;
+
+                    showResult('loading', `Checking job status... (attempt ${attempts}/${maxAttempts})`);
+
+                    const statusResponse = await fetch(`https://api.runpod.ai/v2/${API_ENDPOINT.split('/')[5]}/status/${jobId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${API_KEY}`
+                        }
+                    });
+
+                    if (!statusResponse.ok) {
+                        throw new Error(`Status check failed: ${statusResponse.status}`);
+                    }
+
+                    const statusData = await statusResponse.json();
+                    console.log('Status check response:', statusData);
+
+                    if (statusData.status === 'COMPLETED') {
+                        if (statusData.output) {
+                            handleAudioResult(statusData, textLength);
+                            return;
+                        } else {
+                            showResult('error', '❌ Job completed but no audio output found. Check console for details.');
+                            console.log('Completed response with no output:', statusData);
+                            return;
+                        }
+                    } else if (statusData.status === 'FAILED') {
+                        showResult('error', `❌ Job failed: ${statusData.error || 'Unknown error'}`);
+                        return;
+                    } else if (statusData.status === 'IN_PROGRESS' || statusData.status === 'IN_QUEUE') {
+                        // Continue polling
+                        continue;
+                    } else {
+                        showResult('error', `❌ Unknown status: ${statusData.status}`);
+                        return;
+                    }
+
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    showResult('error', `❌ Error checking status: ${error.message}`);
+                    return;
+                }
+            }
+
+            showResult('error', '❌ Timeout: Job took too long to complete (5+ minutes)');
+        }
+
+        function handleAudioResult(data, textLength) {
+            console.log('Handling audio result:', data);
+            
+            if (!data.output) {
+                showResult('error', 'Response completed but no output field found. Check console for details.');
+                return;
+            }
+            
+            // Handle base64 audio from Chatterbox TTS
+            if (data.output.audio_base64) {
+                console.log('Found audio_base64 field from Chatterbox TTS');
+                const audioData = data.output.audio_base64;
+                
+                try {
+                    // Convert base64 to blob
+                    const binaryData = atob(audioData);
+                    const bytes = new Uint8Array(binaryData.length);
+                    for (let i = 0; i < binaryData.length; i++) {
+                        bytes[i] = binaryData.charCodeAt(i);
+                    }
+                    const audioBlob = new Blob([bytes], { type: 'audio/wav' });
+                    
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    showResult('success', `✅ Voice cloned audio generated! (${textLength} characters)`);
+                    audioPlayer.src = audioUrl;
+                    audioPlayer.style.display = 'block';
+                    
+                    // Add download link
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = audioUrl;
+                    downloadLink.download = `myers_audiobook_${Date.now()}.wav`;
+                    downloadLink.textContent = '💾 Download Audio';
+                    downloadLink.style.display = 'block';
+                    downloadLink.style.marginTop = '10px';
+                    downloadLink.style.textDecoration = 'none';
+                    downloadLink.style.background = '#28a745';
+                    downloadLink.style.color = 'white';
+                    downloadLink.style.padding = '8px 16px';
+                    downloadLink.style.borderRadius = '4px';
+                    downloadLink.style.textAlign = 'center';
+                    
+                    // Remove old download link if exists
+                    const oldLink = result.querySelector('a[download]');
+                    if (oldLink) oldLink.remove();
+                    
+                    result.appendChild(downloadLink);
+                    
+                    if (data.output.used_voice_cloning) {
+                        showResult('success', `✅ Voice cloned audio generated! Voice cloning: ✅ ACTIVE (${textLength} characters)`);
+                    }
+                    
+                } catch (error) {
+                    console.error('Error processing base64 audio:', error);
+                    showResult('error', `Error processing audio data: ${error.message}`);
+                }
+            } else {
+                console.log('Unknown output format:', data.output);
+                console.log('Available output keys:', Object.keys(data.output));
+                showResult('error', 'Audio generated but no recognized audio format in response. Check console for details.');
+            }
+        }
+    </script>
+</body>
+</html>
