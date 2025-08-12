@@ -11,6 +11,5 @@ pydub
 gradio
 spaces
 nltk
-whisper
+openai-whisper
 faster-whisper
-difflib
