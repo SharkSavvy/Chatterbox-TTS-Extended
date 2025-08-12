@@ -1,5 +1,5 @@
-# Use NVIDIA CUDA base image
-FROM nvidia/cuda:11.8-devel-ubuntu22.04
+# Use PyTorch base image with CUDA support
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -7,9 +7,6 @@ ENV PYTHONUNBUFFERED=1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-dev \
     git \
     wget \
     curl \
@@ -24,18 +21,23 @@ WORKDIR /workspace
 # Clone your Chatterbox TTS repository
 RUN git clone https://github.com/SharkSavvy/Chatterbox-TTS-Extended.git chatterbox
 
-# Install Python dependencies
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Install RunPod
-RUN pip3 install runpod
+RUN pip install runpod
+
+# Install additional dependencies for Chatterbox
+WORKDIR /workspace/chatterbox
+RUN pip install -e .
 
 # Copy the handler
+WORKDIR /workspace
 COPY runpod_chatterbox_handler.py .
 
-# Download models (this will cache them in the image)
-RUN python3 -c "from chatterbox.src.chatterbox.tts import ChatterboxTTS; ChatterboxTTS.from_pretrained('cpu')"
+# Pre-download models to speed up first run
+RUN python3 -c "from chatterbox.src.chatterbox.tts import ChatterboxTTS; ChatterboxTTS.from_pretrained('cpu')" || echo "Model download failed, will download on first run"
 
 # Set the entry point
 CMD ["python3", "runpod_chatterbox_handler.py"]

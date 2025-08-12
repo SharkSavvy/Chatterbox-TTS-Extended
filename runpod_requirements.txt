@@ -1,0 +1,14 @@
+runpod
+torchaudio
+transformers
+accelerate
+numpy
+scipy
+librosa
+soundfile
+pydub
+nltk
+openai-whisper
+faster-whisper
+gradio
+spaces
